@@ -1,0 +1,17 @@
+import { Router } from 'express';
+import { userController } from '../controllers/userController.js';
+import { authenticate } from '../middleware/auth.js';
+import { wrap } from '../utils/asyncHandler.js';
+
+const router = Router();
+const w = wrap;
+
+router.post('/devices', authenticate, w(userController.registerDevice));
+router.get('/push/vapid-key', w(userController.getVapidPublicKey));
+router.post('/push/subscribe', authenticate, w(userController.subscribePush));
+router.post('/push/unsubscribe', authenticate, w(userController.unsubscribePush));
+router.get('/notifications', authenticate, w(userController.listNotifications));
+router.post('/notifications/:id/read', authenticate, w(userController.markRead));
+router.post('/notifications/read-all', authenticate, w(userController.markAllRead));
+
+export default router;
