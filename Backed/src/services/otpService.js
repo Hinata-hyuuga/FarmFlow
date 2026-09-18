@@ -1,17 +1,17 @@
-import bcrypt from 'bcryptjs';
-import { getDb } from '../config/db.js';
-import { env } from '../config/env.js';
-import { badRequest } from '../utils/errors.js';
-import { sendSms } from './smsService.js';
+import bcrypt from "bcryptjs";
+import { getDb } from "../config/db.js";
+import { env } from "../config/env.js";
+import { badRequest } from "../utils/errors.js";
+import { sendSms } from "./smsService.js";
 
 function generateOtp(digits) {
   const max = 10 ** digits;
   const value = Math.floor(Math.random() * max);
-  return String(value).padStart(digits, '0');
+  return String(value).padStart(digits, "0");
 }
 
 export function normalizeMobile(mobile) {
-  return String(mobile).replace(/[^\d]/g, '');
+  return String(mobile).replace(/[^\d]/g, "");
 }
 
 async function hashOtp(code) {
@@ -21,28 +21,35 @@ async function hashOtp(code) {
 export async function sendOtp(mobile) {
   const normalized = normalizeMobile(mobile);
   if (normalized.length < 10) {
-    throw badRequest('INVALID_MOBILE', 'A valid 10-digit mobile number is required');
+    throw badRequest(
+      "INVALID_MOBILE",
+      "A valid 10-digit mobile number is required",
+    );
   }
 
   const code = generateOtp(env.otp.digits);
-  const expiresAt = new Date(Date.now() + env.otp.ttlMinutes * 60 * 1000).toISOString();
+  const expiresAt = new Date(
+    Date.now() + env.otp.ttlMinutes * 60 * 1000,
+  ).toISOString();
 
-  getDb().prepare(
-    'INSERT INTO otp_codes (mobile, code_hash, expires_at) VALUES (?, ?, ?)',
-  ).run(normalized, await hashOtp(code), expiresAt);
+  getDb()
+    .prepare(
+      "INSERT INTO otp_codes (mobile, code_hash, expires_at) VALUES (?, ?, ?)",
+    )
+    .run(normalized, await hashOtp(code), expiresAt);
 
-  const result = { success: true, message: 'OTP sent successfully' };
+  const result = { success: true, message: "OTP sent successfully" };
 
   if (env.otp.devMode) {
     result.devOtp = code;
   } else {
     try {
-      const message = `Your KisanConnect OTP is: ${code}. It is valid for ${env.otp.ttlMinutes} minutes. Do not share this with anyone.`;
+      const message = `Your FarmFlow OTP is: ${code}. It is valid for ${env.otp.ttlMinutes} minutes. Do not share this with anyone.`;
       const smsResult = await sendSms(normalized, message);
       result.smsSent = true;
       result.messageId = smsResult.messageId;
     } catch (smsError) {
-      console.error('Failed to send SMS:', smsError.message);
+      console.error("Failed to send SMS:", smsError.message);
       result.smsSent = false;
       result.smsError = smsError.message;
     }
@@ -54,38 +61,54 @@ export async function sendOtp(mobile) {
 export function canRequestOtp(mobile, now = new Date()) {
   const windowStart = new Date(now.getTime() - env.otp.rateLimitWindowMs)
     .toISOString()
-    .replace('T', ' ')
+    .replace("T", " ")
     .slice(0, 19);
-  const row = getDb().prepare(
-    'SELECT COUNT(*) AS c FROM otp_codes WHERE mobile = ? AND created_at > ?',
-  ).get(mobile, windowStart);
+  const row = getDb()
+    .prepare(
+      "SELECT COUNT(*) AS c FROM otp_codes WHERE mobile = ? AND created_at > ?",
+    )
+    .get(mobile, windowStart);
   return Number(row.c) < env.otp.rateLimitMax;
 }
 
 export async function verifyOtp(mobile, code) {
   const normalized = normalizeMobile(mobile);
   const db = getDb();
-  const row = db.prepare(
-    'SELECT id, code_hash, expires_at, attempts FROM otp_codes WHERE mobile = ? ORDER BY id DESC LIMIT 1',
-  ).get(normalized);
+  const row = db
+    .prepare(
+      "SELECT id, code_hash, expires_at, attempts FROM otp_codes WHERE mobile = ? ORDER BY id DESC LIMIT 1",
+    )
+    .get(normalized);
 
-  if (!row) throw badRequest('OTP_NOT_FOUND', 'No OTP was requested for this mobile number');
+  if (!row)
+    throw badRequest(
+      "OTP_NOT_FOUND",
+      "No OTP was requested for this mobile number",
+    );
 
   if (new Date(row.expires_at) < new Date()) {
-    throw badRequest('OTP_EXPIRED', 'The OTP has expired. Please request a new one.');
+    throw badRequest(
+      "OTP_EXPIRED",
+      "The OTP has expired. Please request a new one.",
+    );
   }
 
   if (Number(row.attempts) >= env.otp.maxAttempts) {
-    db.prepare('DELETE FROM otp_codes WHERE id = ?').run(row.id);
-    throw badRequest('OTP_MAX_ATTEMPTS', 'Too many incorrect attempts. Please request a new OTP.');
+    db.prepare("DELETE FROM otp_codes WHERE id = ?").run(row.id);
+    throw badRequest(
+      "OTP_MAX_ATTEMPTS",
+      "Too many incorrect attempts. Please request a new OTP.",
+    );
   }
 
   const matches = await bcrypt.compare(String(code), row.code_hash);
   if (!matches) {
-    db.prepare('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = ?').run(row.id);
-    throw badRequest('OTP_INVALID', 'The OTP is incorrect');
+    db.prepare("UPDATE otp_codes SET attempts = attempts + 1 WHERE id = ?").run(
+      row.id,
+    );
+    throw badRequest("OTP_INVALID", "The OTP is incorrect");
   }
 
-  db.prepare('DELETE FROM otp_codes WHERE id = ?').run(row.id);
+  db.prepare("DELETE FROM otp_codes WHERE id = ?").run(row.id);
   return normalized;
 }

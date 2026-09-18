@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     # Database
     # Default: read the backend's SQLite database directly (no install needed).
     # For a PostgreSQL deployment, set DATABASE_URL to a postgresql+psycopg2:// URL.
-    database_url: str = "sqlite:///C:/KisanConnectBackend/data/kisanconnect.db"
-    async_database_url: str = "sqlite+aiosqlite:///C:/KisanConnectBackend/data/kisanconnect.db"
+    database_url: str = "sqlite:////home/lorddsp3/Desktop/FarmFlow/Backed/data/kisanconnect.db"
+    async_database_url: str = "sqlite+aiosqlite:////home/lorddsp3/Desktop/FarmFlow/Backed/data/kisanconnect.db"
 
     # Model storage
     model_dir: str = "saved_models"
